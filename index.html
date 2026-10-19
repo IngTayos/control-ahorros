@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Control de Ahorros Sincronizado</title>
+    <title>Control de Ahorros Pro</title>
     <style>
         :root {
             --bg-color: #0b0f19;
@@ -42,7 +42,8 @@
             cursor: pointer;
             margin-bottom: 6px;
         }
-        .btn-sync { background-color: #238636; }
+        .btn-row { display: flex; gap: 6px; margin-top: 6px; }
+        .btn-secondary { background-color: #21262d; border: 1px solid var(--border-color); color: var(--text-main); flex: 1; padding: 8px; border-radius: 8px; font-size: 11px; cursor: pointer; font-weight: bold; }
 
         .section-title { font-size: 13px; color: var(--text-sec); margin: 15px 0 10px 5px; font-weight: bold; }
         .card {
@@ -89,18 +90,22 @@
             overflow-y: auto;
             color: var(--text-sec);
         }
-        #syncStatus { font-size: 11px; text-align: center; color: var(--text-sec); margin-top: 8px; }
     </style>
 </head>
 <body>
 
     <div class="header-card">
-        <h2>PATRIMONIO TOTAL (NUBE)</h2>
+        <h2>PATRIMONIO TOTAL</h2>
         <div class="total-amount" id="lblTotal">$0.00</div>
         <div class="breakdown" id="lblDesglose">GBM+: $0.00 • Revolut: $0.00 • Efectivo: $0.00</div>
+        
         <button class="btn-primary" onclick="agregarCuenta()">+ Agregar Cuenta o Alcancía</button>
-        <button class="btn-primary btn-sync" onclick="sincronizarConNube()">🔄 Sincronizar Datos</button>
-        <div id="syncStatus">Listo para sincronizar</div>
+        
+        <div class="btn-row">
+            <button class="btn-secondary" onclick="exportarRespaldo()">📤 Exportar Respaldo</button>
+            <button class="btn-secondary" onclick="document.getElementById('fileInput').click()">📥 Importar Respaldo</button>
+            <input type="file" id="fileInput" style="display: none" accept=".json" onchange="importarRespaldo(event)">
+        </div>
     </div>
 
     <div class="section-title">MIS APARTADOS Y ALCANCÍAS</div>
@@ -110,59 +115,8 @@
     <div class="log-box" id="logBox">Sin movimientos recientes...</div>
 
     <script>
-        // Clave única para tu almacenamiento en la nube gratuita (JSONBin)
-        const BIN_ID = "66f5df0aacd3cb34876b53a2"; // Contenedor público compartido
-        const API_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
-
-        let cuentas = [];
-        let bitacora = [];
-
-        async function sincronizarConNube() {
-            document.getElementById('syncStatus').innerText = "Sincronizando con la nube...";
-            try {
-                let response = await fetch(API_URL, {
-                    headers: { 'X-Access-Key': '$2a$10$w81xPZ6j5sE2s8s6s8s6se... (público)' }
-                });
-                // Método alternativo sin llave privada usando lectura directa de JSONBin
-                let res = await fetch(`https://api.jsonbin.io/v3/b/65f5df0aacd3cb34876b53a2/latest`);
-                if (res.ok) {
-                    let data = await res.json();
-                    if (data.record) {
-                        cuentas = data.record.cuentas || [];
-                        bitacora = data.record.bitacora || [];
-                        render();
-                        document.getElementById('syncStatus').innerText = "✅ Sincronizado correctamente";
-                    }
-                } else {
-                    document.getElementById('syncStatus').innerText = "Usando modo local (offline)";
-                    cargarLocal();
-                }
-            } catch (e) {
-                document.getElementById('syncStatus').innerText = "Modo local activo";
-                cargarLocal();
-            }
-        }
-
-        async function guardarEnNube() {
-            document.getElementById('syncStatus').innerText = "Guardando en la nube...";
-            try {
-                await fetch(API_URL, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cuentas, bitacora })
-                });
-                document.getElementById('syncStatus').innerText = "☁️ Cambios guardados en la nube";
-            } catch (e) {
-                document.getElementById('syncStatus').innerText = "⚠️ Guardado localmente (sin internet)";
-                guardarLocal();
-            }
-        }
-
-        function cargarLocal() {
-            cuentas = JSON.parse(localStorage.getItem('cuentas_ahorro')) || [];
-            bitacora = JSON.parse(localStorage.getItem('bitacora_ahorro')) || [];
-            render();
-        }
+        let cuentas = JSON.parse(localStorage.getItem('cuentas_ahorro')) || [];
+        let bitacora = JSON.parse(localStorage.getItem('bitacora_ahorro')) || [];
 
         function guardarLocal() {
             localStorage.setItem('cuentas_ahorro', JSON.stringify(cuentas));
@@ -171,16 +125,16 @@
         }
 
         function agregarCuenta() {
-            let plataforma = prompt("¿Dónde guardas este dinero? (Escribe: GBM+, Revolut o Efectivo)");
+            let plataforma = prompt("¿Dónde guardas este dinero? (Escribe: GBM+, Revolut o Efectivo / Alcancía)");
             if (!plataforma) return;
-            let nombre = prompt("Nombre del apartado (ej. Alcancía Sala, Smart Cash):");
+            let nombre = prompt("Nombre del apartado (ej. Alcancía Cuarto, Smart Cash):");
             if (!nombre) return;
             let saldo = parseFloat(prompt("Saldo actual inicial: $", "0")) || 0;
             let meta = parseFloat(prompt("Meta total (Pon 0 si es ahorro libre sin límite):", "0")) || 0;
 
             cuentas.push({ id: Date.now(), nombre, plataforma, saldo, meta });
             registrarLog(`Creado: ${nombre} (${plataforma}) con $${saldo.toFixed(2)}`);
-            guardarEnNube();
+            guardarLocal();
         }
 
         function modificarSaldo(id) {
@@ -196,7 +150,7 @@
 
             let tipo = monto >= 0 ? "Depósito" : "Retiro";
             registrarLog(`${tipo}: $${monto.toFixed(2)} en ${cuenta.nombre}`);
-            guardarEnNube();
+            guardarLocal();
         }
 
         function eliminarCuenta(id) {
@@ -204,7 +158,7 @@
             if (idx !== -1 && confirm("¿Eliminar este apartado?")) {
                 registrarLog(`Eliminado: ${cuentas[idx].nombre}`);
                 cuentas.splice(idx, 1);
-                guardarEnNube();
+                guardarLocal();
             }
         }
 
@@ -212,6 +166,39 @@
             let fecha = new Date().toLocaleDateString();
             bitacora.unshift(`[${fecha}] ${texto}`);
             if (bitacora.length > 30) bitacora.pop();
+        }
+
+        function exportarRespaldo() {
+            let datos = { cuentas, bitacora };
+            let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(datos));
+            let downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "respaldo_ahorros.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importarRespaldo(event) {
+            let file = event.target.files[0];
+            if (!file) return;
+            let reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    let json = JSON.parse(e.target.result);
+                    if (json.cuentas && json.bitacora) {
+                        cuentas = json.cuentas;
+                        bitacora = json.bitacora;
+                        guardarLocal();
+                        alert("✅ ¡Respaldo importado con éxito!");
+                    } else {
+                        alert("⚠️ El archivo no tiene el formato correcto.");
+                    }
+                } catch (err) {
+                    alert("Error al leer el archivo JSON.");
+                }
+            };
+            reader.readAsText(file);
         }
 
         function render() {
@@ -243,7 +230,7 @@
                     <div style="font-size: 10px; color: var(--text-sec); margin-bottom: 8px;">${textoBarra}</div>
                     <div class="card-actions">
                         <button class="btn-action" onclick="modificarSaldo(${c.id})">± Movimiento</button>
-                        <button class="btn-action btn-delete" onclick="eliminarCuenta(${c.id})">Eliminar</button>
+                        <button class="btn-action btn-delete" onclick="eliminarCuenta(${c.id})">Eliminar эн</button>
                     </div>
                 `;
                 container.appendChild(card);
@@ -257,8 +244,7 @@
             logBox.innerHTML = bitacora.length > 0 ? bitacora.join('<br>') : "Sin movimientos recientes...";
         }
 
-        // Cargar datos al abrir la app
-        sincronizarConNube();
+        render();
     </script>
 </body>
 </html>
